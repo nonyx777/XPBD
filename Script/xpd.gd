@@ -1,51 +1,268 @@
-extends Node
+extends Node3D
 
-var data = JSON.parse_string(FileAccess.get_file_as_string("res://tetrahedral_mesh.json"))
-
-var vertices = data["vertices"]
-var tetIds = data["tetIds"]
-var tetEdgeIds = data["tetEdgeIds"]
-var surface = data["tetSurfaceTriIds"]
-
-func _ready() -> void:
-	var verts = PackedVector3Array()
-	for v in vertices:
-		verts.append(Vector3(v[0], v[1], v[2]))
-	var indices = PackedInt32Array()
-	for tri in surface:
-		indices.append(tri[0])
-		indices.append(tri[1])
-		indices.append(tri[2])
+class TetGenMesh:
+	var vertices: PackedVector3Array = PackedVector3Array()
+	var tetrahedra: Array = []
+	var surface_faces: Array = []
+	var edges: Array = []
+	var face_markers: Array = []  # Store boundary markers for faces
 	
-	var normals = PackedVector3Array()
-	normals.resize(verts.size())
-	for i in range(normals.size()):
-		normals[i] = Vector3.ZERO
-	for i in range(0, indices.size(), 3):
-		var i0 = indices[i]
-		var i1 = indices[i+1]
-		var i2 = indices[i+2]
+	func load_from_base_name(base_path: String):
+		load_nodes(base_path + ".node")
+		load_ele(base_path + ".ele")
+		load_face(base_path + ".face")
+		load_edge(base_path + ".edge")
+	
+	func load_nodes(filepath: String):
+		vertices.clear()
+		var file = FileAccess.open(filepath, FileAccess.READ)
+		if not file:
+			print("Error: Cannot open ", filepath)
+			return
 		
-		var n = (verts[i1] - verts[i0]).cross(verts[i2] - verts[i0])
-		normals[i0] += n
-		normals[i1] += n
-		normals[i2] += n
-	for i in range(normals.size()):
-		normals[i] = normals[i].normalized()
+		# Read first line
+		var line = file.get_line()
+		print("Node file header: ", line)
+		
+		var parts = line.strip_edges().split(" ", false)
+		if parts.size() < 2:
+			print("Invalid .node file format")
+			return
+		
+		var num_vertices = int(parts[0])
+		var dimension = int(parts[1]) if parts.size() > 1 else 3
+		var num_attributes = int(parts[2]) if parts.size() > 2 else 0
+		var has_markers = int(parts[3]) if parts.size() > 3 else 0
+		
+		print("Loading ", num_vertices, " vertices (dim:", dimension, ", attr:", num_attributes, ", markers:", has_markers, ")")
+		
+		# Read each vertex
+		for i in range(num_vertices):
+			line = file.get_line()
+			while line.strip_edges() == "":
+				line = file.get_line()
+			
+			parts = line.strip_edges().split(" ", false)
+			if parts.size() < 1 + dimension:
+				print("Error parsing vertex at line ", i+2)
+				continue
+			
+			# Index is first token, skip it
+			var x = float(parts[1])
+			var y = float(parts[2]) if dimension >= 2 else 0.0
+			var z = float(parts[3]) if dimension >= 3 else 0.0
+			
+			vertices.append(Vector3(x, y, z))
+		
+		file.close()
+		print("Loaded ", vertices.size(), " vertices from ", filepath)
 	
-	var arrays = []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = verts
-	arrays[Mesh.ARRAY_INDEX] = indices
-	arrays[Mesh.ARRAY_NORMAL] = normals
+	func load_ele(filepath: String):
+		tetrahedra.clear()
+		var file = FileAccess.open(filepath, FileAccess.READ)
+		if not file:
+			print("Error: Cannot open ", filepath)
+			return
+		
+		var line = file.get_line()
+		print("Ele file header: ", line)
+		
+		var parts = line.strip_edges().split(" ", false)
+		if parts.size() < 2:
+			print("Invalid .ele file format")
+			return
+		
+		var num_tets = int(parts[0])
+		var nodes_per_tet = int(parts[1])
+		var num_attributes = int(parts[2]) if parts.size() > 2 else 0
+		
+		print("Loading ", num_tets, " tetrahedra (nodes:", nodes_per_tet, ", attr:", num_attributes, ")")
+		
+		for i in range(num_tets):
+			line = file.get_line()
+			while line.strip_edges() == "":
+				line = file.get_line()
+			
+			parts = line.strip_edges().split(" ", false)
+			if parts.size() < 1 + nodes_per_tet:
+				print("Error parsing tet at line ", i+2)
+				continue
+			
+			# Convert from 1-based to 0-based indices
+			var v0 = int(parts[1]) - 1
+			var v1 = int(parts[2]) - 1
+			var v2 = int(parts[3]) - 1
+			var v3 = int(parts[4]) - 1
+			
+			tetrahedra.append([v0, v1, v2, v3])
+		
+		file.close()
+		print("Loaded ", tetrahedra.size(), " tetrahedra from ", filepath)
 	
-	var mesh = ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	func load_face(filepath: String):
+		surface_faces.clear()
+		face_markers.clear()
+		var file = FileAccess.open(filepath, FileAccess.READ)
+		if not file:
+			print("Error: Cannot open ", filepath)
+			return
+		
+		var line = file.get_line()
+		print("Face file header: ", line)
+		
+		var parts = line.strip_edges().split(" ", false)
+		if parts.size() < 1:
+			print("Invalid .face file format")
+			return
+		
+		var num_faces = int(parts[0])
+		var has_markers = int(parts[1]) if parts.size() > 1 else 0
+		
+		print("Loading ", num_faces, " faces (markers:", has_markers, ")")
+		
+		for i in range(num_faces):
+			line = file.get_line()
+			while line.strip_edges() == "":
+				line = file.get_line()
+			
+			parts = line.strip_edges().split(" ", false)
+			if parts.size() < 4:
+				print("Error parsing face at line ", i+2)
+				continue
+			
+			# Convert from 1-based to 0-based indices
+			var v0 = int(parts[1]) - 1
+			var v1 = int(parts[2]) - 1
+			var v2 = int(parts[3]) - 1
+			
+			surface_faces.append([v0, v1, v2])
+			
+			# Store marker if present
+			if has_markers > 0 and parts.size() > 4:
+				face_markers.append(int(parts[4]))
+			else:
+				face_markers.append(0)
+		
+		file.close()
+		print("Loaded ", surface_faces.size(), " surface faces from ", filepath)
 	
-	var mi = MeshInstance3D.new()
-	mi.mesh = mesh
-	add_child(mi)
+	func load_edge(filepath: String):
+		edges.clear()
+		var file = FileAccess.open(filepath, FileAccess.READ)
+		if not file:
+			print("Error: Cannot open ", filepath)
+			return
+		
+		var line = file.get_line()
+		print("Edge file header: ", line)
+		
+		var parts = line.strip_edges().split(" ", false)
+		if parts.size() < 1:
+			print("Invalid .edge file format")
+			return
+		
+		var num_edges = int(parts[0])
+		var has_markers = int(parts[1]) if parts.size() > 1 else 0
+		
+		print("Loading ", num_edges, " edges (markers:", has_markers, ")")
+		
+		for i in range(num_edges):
+			line = file.get_line()
+			while line.strip_edges() == "":
+				line = file.get_line()
+			
+			parts = line.strip_edges().split(" ", false)
+			if parts.size() < 3:
+				print("Error parsing edge at line ", i+2)
+				continue
+			
+			# Convert from 1-based to 0-based indices
+			var v0 = int(parts[1]) - 1
+			var v1 = int(parts[2]) - 1
+			
+			edges.append([v0, v1])
+		
+		file.close()
+		print("Loaded ", edges.size(), " edges from ", filepath)
 	
-	print("Vert Size: ", verts.size())
-	print("Indices Size: ", indices.size())
-	print("Normals Size: ", normals.size())
+	func create_surface_mesh() -> ArrayMesh:
+		if surface_faces.is_empty():
+			print("No surface faces to create mesh")
+			return null
+		
+		var arrays = []
+		arrays.resize(Mesh.ARRAY_MAX)
+		
+		# Vertices
+		arrays[Mesh.ARRAY_VERTEX] = vertices
+		
+		# Indices (triangles)
+		var indices = PackedInt32Array()
+		for face in surface_faces:
+			indices.append(face[0])
+			indices.append(face[1])
+			indices.append(face[2])
+		arrays[Mesh.ARRAY_INDEX] = indices
+		
+		# Calculate normals
+		var normals = PackedVector3Array()
+		normals.resize(vertices.size())
+		for i in range(normals.size()):
+			normals[i] = Vector3.ZERO
+		
+		# First pass: accumulate normals
+		for i in range(0, indices.size(), 3):
+			var i0 = indices[i]
+			var i1 = indices[i+1]
+			var i2 = indices[i+2]
+			
+			var v0 = vertices[i0]
+			var v1 = vertices[i1]
+			var v2 = vertices[i2]
+			
+			var normal = (v1 - v0).cross(v2 - v0)
+			
+			if normal.length() < 0.0001:
+				continue
+				
+			normal = normal.normalized()
+			
+			normals[i0] += normal
+			normals[i1] += normal
+			normals[i2] += normal
+		
+		# Normalize normals
+		for i in range(normals.size()):
+			normals[i] = -normals[i].normalized()
+		
+		arrays[Mesh.ARRAY_NORMAL] = normals
+		
+		# Create mesh
+		var mesh = ArrayMesh.new()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		
+		print("Created surface mesh with ", vertices.size(), " vertices and ", surface_faces.size(), " triangles")
+		print("Mesh bounds: ", mesh.get_aabb())
+		
+		return mesh
+
+func _ready():
+	var tet_mesh = TetGenMesh.new()
+	tet_mesh.load_from_base_name("res://Mesh/Suzanne")
+	
+	# Create surface mesh
+	var surface_mesh = tet_mesh.create_surface_mesh()
+	if surface_mesh:
+		var mesh_instance = MeshInstance3D.new()
+		mesh_instance.mesh = surface_mesh
+		
+		# Center the mesh
+		var bounds = surface_mesh.get_aabb()
+		var center = bounds.get_center()
+		mesh_instance.position = -center
+		
+		# Add to scene
+		add_child(mesh_instance)
+		
+		print("Mesh added to scene. Bounds: ", bounds)
+		print("Mesh center: ", center)
