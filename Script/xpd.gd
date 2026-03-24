@@ -38,8 +38,39 @@ func solve(dt: float):
 	solveEdges(edge_compliance, dt)
 	solveVolumes(volume_compliance, dt)
 
+# [e1, e2, e3 | e2, e3 | e3, e1] Compact Edge Array
+# [2, 1, 1] Edge Stride
+# [0, 3, 5] Edge Vertex Indices
 func solveEdges(compliance: float, dt: float):
-	pass
+	var alpha: float = compliance / dt / dt;
+	for i in range(edge_vertex_indices.size()):
+		var id1: int = edge_vertex_indices[i]
+		var stride = edge_stride[i]
+		for stri in range(1, stride + 1):
+			var id2: int = edge_vertex_indices[id1 + stri]
+			var v1: Vector3 = pos[id1]
+			var v2: Vector3 = pos[id2]
+			var w1: float = inv_mass[id1]
+			var w2: float = inv_mass[id2]
+			var w: float = w1 + w2
+			if w == 0.0:
+				continue
+			
+			var grad: Vector3 = v1 - v2
+			var len: float = grad.length()
+			
+			if len == 0.0:
+				continue
+			
+			grad = grad.normalized()
+			var rest_len: float = edge_lengths[id2]
+			var C: float = len - rest_len
+			var s: float = -C / (w + alpha)
+			pos[id1] += grad * s * w1
+
+# [e1, e2, e3, e4 | e2, e6, e10, e1, e11, e20, e12] Compact Tetrahedron Array
+# [3, 6] # Tetrahedron Stride
+# [0, 4] # Tetrahedron Vertex Indices
 func solveVolumes(compliance: float, dt: float):
 	pass
 
