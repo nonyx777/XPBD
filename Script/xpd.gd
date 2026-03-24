@@ -21,6 +21,7 @@ var edge_compliance: float = 0.0
 var volume_compliance: float = 0.0
 
 var edge_lengths: PackedFloat32Array
+var tet_volumes: PackedFloat32Array
 
 func preSolve(dt: float, force: Vector3):
 	for i in range(pos.size()):
@@ -69,10 +70,71 @@ func solveEdges(compliance: float, dt: float):
 			pos[id1] += grad * s * w1
 
 # [e1, e2, e3, e4 | e2, e6, e10, e1, e11, e20, e12] Compact Tetrahedron Array
-# [3, 6] # Tetrahedron Stride
+# [3, 6] # Tetrahedron Stride | Always multiple of 3
 # [0, 4] # Tetrahedron Vertex Indices
 func solveVolumes(compliance: float, dt: float):
-	pass
+	var alpha: float = compliance / dt / dt
+	for i in range(tet_vertex_indices.size()):
+		var w = 0.0
+		var id1: int = tet_vertex_indices[i]
+		var stride: float = tet_stride[i]
+		
+		var num_iter: int = stride / 3
+		var tet_neighbours: int = 1
+		for iter in range(num_iter):
+			var id2: int = id1 + tet_neighbours
+			var id3: int = id2 + 1
+			var id4: int = id3 + 1
+			
+			# for id1
+			var vec_32: Vector3 = pos[id3] - pos[id2]
+			var vec_42: Vector3 = pos[id4] - pos[id2]
+			var grad1: Vector3 = vec_32.cross(vec_42)
+			grad1 /= (1.0 / 6.0)
+			
+			# ... id2
+			var vec_31: Vector3 = pos[id3] - pos[id1]
+			var vec_41: Vector3 = pos[id4] - pos[id1]
+			var grad2: Vector3 = vec_31.cross(vec_41)
+			grad2 /= (1.0 / 6.0)
+			
+			# ... id3
+			var vec_21: Vector3 = pos[id2] - pos[id1]
+			vec_41 = pos[id4] - pos[id1]
+			var grad3: Vector3 = vec_31.cross(vec_41)
+			grad3 /= (1.0 / 6.0)
+			
+			# ... id4
+			vec_21 = pos[id2] - pos[id1]
+			vec_31 = pos[id3] - pos[id1]
+			var grad4: Vector3 = vec_31.cross(vec_41)
+			grad4 /= (1.0 / 6.0)
+			
+			w += (inv_mass[id1] * grad1.dot(grad1)) + (inv_mass[id2] * grad2.dot(grad2)) + (inv_mass[id3] * grad3.dot(grad3)) + (inv_mass[id4] * grad4.dot(grad4))
+			
+			if w == 0.0:
+				continue
+			
+			var vol: float = getTetVolume(id1, tet_neighbours)
+			var rest_vol: float = tet_volumes[id1 + tet_neighbours]
+			var C: float = vol - rest_vol
+			var s: float = -C / (w + alpha)
+			pos[id1] += grad1 * s * inv_mass[id1]
+			
+			tet_neighbours += 4
+
+func getTetVolume(base_index: int, stride: int) -> int:
+	var id1: int = base_index
+	var id2: int = id1 + stride
+	var id3: int = id2 + 1
+	var id4: int = id3 + 1
+	
+	var vec_21: Vector3 = pos[id2] - pos[id1]
+	var vec_31: Vector3 = pos[id3] - pos[id1]
+	var vec_41: Vector3 = pos[id4] - pos[id1]
+	
+	var height: Vector3 = vec_21.cross(vec_31)
+	return height.dot(vec_41) / 6.0
 
 func postSolve(dt):
 	for i in range(pos.size()):
@@ -109,5 +171,5 @@ func _ready():
 		
 		print("Edge Stride: ", edge_stride.size())
 		print("Edge Vertex Indices: ", edge_vertex_indices.size())
-		print("Tet Stride: ", tet_stride.size())
+		print("Tet Stride: ", tet_stride.slice(0, 20))
 		print("Tet Vertex Indices: ", tet_vertex_indices.size())
