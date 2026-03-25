@@ -48,7 +48,7 @@ func solveEdges(compliance: float, dt: float):
 		var id1: int = edge_vertex_indices[i]
 		var stride = edge_stride[i]
 		for stri in range(1, stride + 1):
-			var id2: int = edge_vertex_indices[id1 + stri]
+			var id2: int = edge_Ids[id1 + stri]
 			var v1: Vector3 = pos[id1]
 			var v2: Vector3 = pos[id2]
 			var w1: float = inv_mass[id1]
@@ -82,9 +82,9 @@ func solveVolumes(compliance: float, dt: float):
 		var num_iter: int = stride / 3
 		var tet_neighbours: int = 1
 		for iter in range(num_iter):
-			var id2: int = id1 + tet_neighbours
-			var id3: int = id2 + 1
-			var id4: int = id3 + 1
+			var id2: int = tet_Ids[id1 + tet_neighbours]
+			var id3: int = tet_Ids[id2 + tet_neighbours + 1]
+			var id4: int = tet_Ids[id3 + tet_neighbours + 2]
 			
 			# for id1
 			var vec_32: Vector3 = pos[id3] - pos[id2]
@@ -110,7 +110,7 @@ func solveVolumes(compliance: float, dt: float):
 			var grad4: Vector3 = vec_31.cross(vec_41)
 			grad4 /= (1.0 / 6.0)
 			
-			w += (inv_mass[id1] * grad1.dot(grad1)) + (inv_mass[id2] * grad2.dot(grad2)) + (inv_mass[id3] * grad3.dot(grad3)) + (inv_mass[id4] * grad4.dot(grad4))
+			w += (inv_mass[id1] * grad1.length_squared()) + (inv_mass[id2] * grad2.length_squared()) + (inv_mass[id3] * grad3.length_squared()) + (inv_mass[id4] * grad4.length_squared())
 			
 			if w == 0.0:
 				continue
@@ -125,9 +125,9 @@ func solveVolumes(compliance: float, dt: float):
 
 func getTetVolume(base_index: int, stride: int) -> int:
 	var id1: int = base_index
-	var id2: int = id1 + stride
-	var id3: int = id2 + 1
-	var id4: int = id3 + 1
+	var id2: int = tet_Ids[id1 + stride]
+	var id3: int = tet_Ids[id1 + stride + 1]
+	var id4: int = tet_Ids[id1 + stride + 2]
 	
 	var vec_21: Vector3 = pos[id2] - pos[id1]
 	var vec_31: Vector3 = pos[id3] - pos[id1]
@@ -142,6 +142,39 @@ func postSolve(dt):
 			continue
 		velocity[i] = (pos[i] - prev_pos[i]) * (1.0 / dt)
 	# update mesh
+
+func computeEdgeRestLengths():
+	for i in range(edge_vertex_indices.size()):
+		var id1: int = edge_vertex_indices[i]
+		var s: int = edge_stride[i]
+		edge_lengths[i] = 0.0
+		for str in range(1, s + 1):
+			var id2: int = edge_Ids[id1 + str]
+			var vert1: Vector3 = pos[id1]
+			var vert2: Vector3 = pos[id2]
+			var len: float = (vert1 - vert2).length()
+			edge_lengths[id2] = len
+
+func computeTetRestVolumes():
+	for i in range(tet_vertex_indices.size()):
+		var id1: int = tet_vertex_indices[i]
+		var stride: float = tet_stride[i]
+		tet_volumes[id1] = 0.0
+		
+		var num_iter: int = stride / 3
+		var tet_neighbours: int = 1
+		for iter in range(num_iter):
+			var id2: int = tet_Ids[id1 + tet_neighbours]
+			var id3: int = tet_Ids[id1 + tet_neighbours + 1]
+			var id4: int = tet_Ids[id1 + tet_neighbours + 2]
+			
+			var vol: float = getTetVolume(id1, tet_neighbours)
+			
+			tet_volumes[id2] = vol
+			tet_volumes[id3] = vol
+			tet_volumes[id4] = vol
+			
+			tet_neighbours += 4
 
 func _ready():
 	tet_mesh = TetGenMesh.new()
