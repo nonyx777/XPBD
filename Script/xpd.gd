@@ -23,92 +23,93 @@ var volume_compliance: float = 0.0
 var edge_lengths: PackedFloat32Array
 var tet_volumes: PackedFloat32Array
 
+var tet_task_id: int
+var edge_task_id: int
+
 # [e1, e2, e3 | e2, e3 | e3, e1] Compact Edge Array
 # [2, 1, 1] Edge Stride
 # [0, 3, 5] Edge Vertex Indices
-func solveEdges(compliance: float, dt: float):
+func solveEdges(i: int, compliance: float = 0.0, dt: float = 0.01):
 	var alpha: float = compliance / dt / dt;
-	for i in range(edge_vertex_indices.size()):
-		var id1: int = edge_Ids[edge_vertex_indices[i]]
-		var id1_index: int = edge_vertex_indices[i]
-		var stride = edge_stride[i]
-		for stri in range(1, stride + 1):
-			var id2: int = edge_Ids[id1 + stri]
-			var id2_index: int = id1 + stri
-			var v1: Vector3 = pos[id1]
-			var v2: Vector3 = pos[id2]
-			var w1: float = inv_mass[id1]
-			var w2: float = inv_mass[id2]
-			var w: float = w1 + w2
-			if w == 0.0:
-				continue
-			
-			var grad: Vector3 = v1 - v2
-			var len: float = grad.length()
-			
-			if len == 0.0:
-				continue
-			
-			grad = grad.normalized()
-			var rest_len: float = edge_lengths[id2_index]
-			var C: float = len - rest_len
-			var s: float = -C / (w + alpha)
-			pos[id1] += grad * s * w1
+	var id1: int = edge_Ids[edge_vertex_indices[i]]
+	var id1_index: int = edge_vertex_indices[i]
+	var stride = edge_stride[i]
+	for stri in range(1, stride + 1):
+		var id2: int = edge_Ids[id1 + stri]
+		var id2_index: int = id1 + stri
+		var v1: Vector3 = pos[id1]
+		var v2: Vector3 = pos[id2]
+		var w1: float = inv_mass[id1]
+		var w2: float = inv_mass[id2]
+		var w: float = w1 + w2
+		if w == 0.0:
+			continue
+		
+		var grad: Vector3 = v1 - v2
+		var len: float = grad.length()
+		
+		if len == 0.0:
+			continue
+		
+		grad = grad.normalized()
+		var rest_len: float = edge_lengths[id2_index]
+		var C: float = len - rest_len
+		var s: float = -C / (w + alpha)
+		pos[id1] += grad * s * w1
 
 # [e1, e2, e3, e4 | e2, e6, e10, e1, e11, e20, e12] Compact Tetrahedron Array
 # [3, 6] # Tetrahedron Stride | Always multiple of 3
 # [0, 4] # Tetrahedron Vertex Indices
-func solveVolumes(compliance: float, dt: float):
+func solveVolumes(i: int, compliance: float = 0.0, dt: float = 0.01):
 	var alpha: float = compliance / dt / dt
-	for i in range(tet_vertex_indices.size()):
-		var w = 0.0
-		var id1: int = tet_Ids[tet_vertex_indices[i]]
-		var id1_index: int = tet_vertex_indices[i]
-		var stride: float = tet_stride[i]
+	var w = 0.0
+	var id1: int = tet_Ids[tet_vertex_indices[i]]
+	var id1_index: int = tet_vertex_indices[i]
+	var stride: float = tet_stride[i]
+	
+	var num_iter: int = stride / 3
+	var tet_neighbours: int = 1
+	for iter in range(num_iter):
+		var id2: int = tet_Ids[id1 + tet_neighbours]
+		var id3: int = tet_Ids[id2 + tet_neighbours + 1]
+		var id4: int = tet_Ids[id3 + tet_neighbours + 2]
 		
-		var num_iter: int = stride / 3
-		var tet_neighbours: int = 1
-		for iter in range(num_iter):
-			var id2: int = tet_Ids[id1 + tet_neighbours]
-			var id3: int = tet_Ids[id2 + tet_neighbours + 1]
-			var id4: int = tet_Ids[id3 + tet_neighbours + 2]
-			
-			# for id1
-			var vec_32: Vector3 = pos[id3] - pos[id2]
-			var vec_42: Vector3 = pos[id4] - pos[id2]
-			var grad1: Vector3 = vec_32.cross(vec_42)
-			grad1 /= (1.0 / 6.0)
-			
-			# ... id2
-			var vec_31: Vector3 = pos[id3] - pos[id1]
-			var vec_41: Vector3 = pos[id4] - pos[id1]
-			var grad2: Vector3 = vec_31.cross(vec_41)
-			grad2 /= (1.0 / 6.0)
-			
-			# ... id3
-			var vec_21: Vector3 = pos[id2] - pos[id1]
-			vec_41 = pos[id4] - pos[id1]
-			var grad3: Vector3 = vec_31.cross(vec_41)
-			grad3 /= (1.0 / 6.0)
-			
-			# ... id4
-			vec_21 = pos[id2] - pos[id1]
-			vec_31 = pos[id3] - pos[id1]
-			var grad4: Vector3 = vec_31.cross(vec_41)
-			grad4 /= (1.0 / 6.0)
-			
-			w += (inv_mass[id1] * grad1.length_squared()) + (inv_mass[id2] * grad2.length_squared()) + (inv_mass[id3] * grad3.length_squared()) + (inv_mass[id4] * grad4.length_squared())
-			
-			if w == 0.0:
-				continue
-			
-			var vol: float = getTetVolume(id1, tet_neighbours)
-			var rest_vol: float = tet_volumes[id1_index + tet_neighbours]
-			var C: float = vol - rest_vol
-			var s: float = -C / (w + alpha)
-			pos[id1] += grad1 * s * inv_mass[id1]
-			
-			tet_neighbours += 3
+		# for id1
+		var vec_32: Vector3 = pos[id3] - pos[id2]
+		var vec_42: Vector3 = pos[id4] - pos[id2]
+		var grad1: Vector3 = vec_32.cross(vec_42)
+		grad1 /= (1.0 / 6.0)
+		
+		# ... id2
+		var vec_31: Vector3 = pos[id3] - pos[id1]
+		var vec_41: Vector3 = pos[id4] - pos[id1]
+		var grad2: Vector3 = vec_31.cross(vec_41)
+		grad2 /= (1.0 / 6.0)
+		
+		# ... id3
+		var vec_21: Vector3 = pos[id2] - pos[id1]
+		vec_41 = pos[id4] - pos[id1]
+		var grad3: Vector3 = vec_31.cross(vec_41)
+		grad3 /= (1.0 / 6.0)
+		
+		# ... id4
+		vec_21 = pos[id2] - pos[id1]
+		vec_31 = pos[id3] - pos[id1]
+		var grad4: Vector3 = vec_31.cross(vec_41)
+		grad4 /= (1.0 / 6.0)
+		
+		w += (inv_mass[id1] * grad1.length_squared()) + (inv_mass[id2] * grad2.length_squared()) + (inv_mass[id3] * grad3.length_squared()) + (inv_mass[id4] * grad4.length_squared())
+		
+		if w == 0.0:
+			continue
+		
+		var vol: float = getTetVolume(id1, tet_neighbours)
+		var rest_vol: float = tet_volumes[id1_index + tet_neighbours]
+		var C: float = vol - rest_vol
+		var s: float = -C / (w + alpha)
+		pos[id1] += grad1 * s * inv_mass[id1]
+		
+		tet_neighbours += 3
 
 func getTetVolume(base_index: int, stride: int) -> float:
 	var id1: int = base_index
@@ -171,8 +172,10 @@ func preSolve(dt: float, force: Vector3):
 			pos[i].y = 0.0;
 
 func solve(dt: float):
-	solveEdges(edge_compliance, dt)
-	solveVolumes(volume_compliance, dt)
+	tet_task_id = WorkerThreadPool.add_group_task(solveVolumes, tet_vertex_indices.size(), -1, true)
+	edge_task_id = WorkerThreadPool.add_group_task(solveEdges, edge_vertex_indices.size(), -1, true)
+	WorkerThreadPool.wait_for_group_task_completion(tet_task_id)
+	WorkerThreadPool.wait_for_group_task_completion(edge_task_id)
 
 func postSolve(dt):
 	for i in range(pos.size()):
@@ -183,7 +186,7 @@ func postSolve(dt):
 
 func _ready():
 	tet_mesh = TetGenMesh.new()
-	tet_mesh.load_from_base_name("res://Mesh/Suzanne")
+	tet_mesh.load_from_base_name("res://Mesh/LowPoly/Suzanne")
 	tet_array_constructor = TetArrayConstructor.new()
 	
 	# Create surface mesh
