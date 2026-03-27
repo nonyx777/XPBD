@@ -248,3 +248,57 @@ func create_surface_mesh() -> ArrayMesh:
 	print("Mesh bounds: ", mesh.get_aabb())
 	
 	return mesh
+
+func update_mesh(vert: PackedVector3Array) -> ArrayMesh:
+	var arrays = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	
+	# Vertices
+	arrays[Mesh.ARRAY_VERTEX] = vert
+	
+	# Indices (triangles)
+	var indices = PackedInt32Array()
+	for face in surface_faces:
+		indices.append(face[0])
+		indices.append(face[1])
+		indices.append(face[2])
+	arrays[Mesh.ARRAY_INDEX] = indices
+	
+	# Calculate normals
+	var normals = PackedVector3Array()
+	normals.resize(vertices.size())
+	for i in range(normals.size()):
+		normals[i] = Vector3.ZERO
+	
+	# First pass: accumulate normals
+	for i in range(0, indices.size(), 3):
+		var i0 = indices[i]
+		var i1 = indices[i+1]
+		var i2 = indices[i+2]
+		
+		var v0 = vertices[i0]
+		var v1 = vertices[i1]
+		var v2 = vertices[i2]
+		
+		var normal = (v1 - v0).cross(v2 - v0)
+		
+		if normal.length() < 0.0001:
+			continue
+			
+		normal = normal.normalized()
+		
+		normals[i0] += normal
+		normals[i1] += normal
+		normals[i2] += normal
+	
+	# Normalize normals
+	for i in range(normals.size()):
+		normals[i] = -normals[i].normalized()
+	
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	
+	# Create mesh
+	var mesh = ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	
+	return mesh

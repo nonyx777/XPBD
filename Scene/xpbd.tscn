@@ -1,4 +1,4 @@
-[gd_scene load_steps=5 format=3 uid="uid://dxe1l1apcjuh"]
+[gd_scene load_steps=8 format=3 uid="uid://dxe1l1apcjuh"]
 
 [ext_resource type="Script" uid="uid://bhjrghxqajwcn" path="res://Script/xpd.gd" id="1_jegph"]
 
@@ -10,10 +10,19 @@ ground_horizon_color = Color(0.662243, 0.671743, 0.686743, 1)
 sky_material = SubResource("ProceduralSkyMaterial_jegph")
 
 [sub_resource type="Environment" id="Environment_xm732"]
-background_mode = 2
 sky = SubResource("Sky_oabi1")
 tonemap_mode = 2
 glow_enabled = true
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_jegph"]
+size = Vector3(10, 1, 10)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_jegph"]
+albedo_color = Color(0.146053, 0.100528, 0.0130293, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_oabi1"]
+material = SubResource("StandardMaterial3D_jegph")
+size = Vector3(10, 1, 10)
 
 [node name="XPBD" type="Node3D"]
 script = ExtResource("1_jegph")
@@ -22,8 +31,17 @@ script = ExtResource("1_jegph")
 environment = SubResource("Environment_xm732")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
-transform = Transform3D(0.4512, 0.118519, -0.884518, -0.684351, -0.590194, -0.428175, -0.572785, 0.798513, -0.185186, 0, 0, 0)
+transform = Transform3D(1, 0, 0, 0, 0.673606, 0.739091, 0, -0.73909, 0.673606, 0, 0, 0)
 shadow_enabled = true
 
 [node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 0.0155851, -0.999879, 0, 0.999879, 0.0155851, 0, -2.18477, -0.0111879)
+transform = Transform3D(0.00619267, -0.297708, 0.954637, 0.000843446, 0.954657, 0.297708, -0.999981, -0.00103842, 0.00616298, 6.87813, 4.15936, -0.0111879)
+
+[node name="Floor" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.585, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor"]
+shape = SubResource("BoxShape3D_jegph")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Floor"]
+mesh = SubResource("BoxMesh_oabi1")
