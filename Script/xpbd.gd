@@ -136,9 +136,9 @@ func preSolve(dt: float, force: Vector3):
 		prev_pos[i] = pos[i]
 		pos[i] += velocity[i] * dt
 		
-		if pos[i].y < -10:
+		if pos[i].y > 3:
 			pos[i] = prev_pos[i]
-			pos[i].y = -10;
+			pos[i].y = 3
 
 func solve(dt: float):
 	solveEdges(edge_compliance, dt)
@@ -169,7 +169,7 @@ func _ready():
 		# Center the mesh
 		var bounds = surface_mesh.get_aabb()
 		var center = bounds.get_center()
-		mesh_instance.position = Vector3(0, 10, 0)
+		mesh_instance.position = Vector3(0, 2, 0)
 		
 		# Add to scene
 		add_child(mesh_instance)
@@ -201,9 +201,9 @@ func _ready():
 		print("Pos: ", pos.size())
 
 func _process(delta: float) -> void:
-	var force: Vector3 = Vector3(0, -5, 0)
-	var dt: float = 0.1
+	var force: Vector3 = Vector3(0, 5, 0)
+	var dt: float = 0.01
 	var sdt: float = dt / 10
-	preSolve(delta, force)
-	solve(delta)
-	postSolve(delta)
+	preSolve(dt, force)
+	solve(dt)
+	postSolve(dt)
