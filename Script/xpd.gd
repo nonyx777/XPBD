@@ -31,12 +31,12 @@ var edge_task_id: int
 # [0, 3, 5] Edge Vertex Indices
 func solveEdges(i: int, compliance: float = 0.0, dt: float = 0.01):
 	var alpha: float = compliance / dt / dt;
-	var id1: int = edge_Ids[edge_vertex_indices[i]]
 	var id1_index: int = edge_vertex_indices[i]
+	var id1: int = edge_Ids[id1_index]
 	var stride = edge_stride[i]
 	for stri in range(1, stride + 1):
-		var id2: int = edge_Ids[id1 + stri]
-		var id2_index: int = id1 + stri
+		var id2_index: int = id1_index + stri
+		var id2: int = edge_Ids[id2_index]
 		var v1: Vector3 = pos[id1]
 		var v2: Vector3 = pos[id2]
 		var w1: float = inv_mass[id1]
@@ -62,17 +62,17 @@ func solveEdges(i: int, compliance: float = 0.0, dt: float = 0.01):
 # [0, 4] # Tetrahedron Vertex Indices
 func solveVolumes(i: int, compliance: float = 0.0, dt: float = 0.01):
 	var alpha: float = compliance / dt / dt
-	var id1: int = tet_Ids[tet_vertex_indices[i]]
 	var id1_index: int = tet_vertex_indices[i]
+	var id1: int = tet_Ids[id1_index]
 	var stride: float = tet_stride[i]
 	
 	var num_iter: int = stride / 3
 	var tet_neighbours: int = 1
 	for iter in range(num_iter):
 		var w = 0.0
-		var id2: int = tet_Ids[id1 + tet_neighbours]
-		var id3: int = tet_Ids[id1 + tet_neighbours + 1]
-		var id4: int = tet_Ids[id1 + tet_neighbours + 2]
+		var id2: int = tet_Ids[id1_index + tet_neighbours]
+		var id3: int = tet_Ids[id1_index + tet_neighbours + 1]
+		var id4: int = tet_Ids[id1_index + tet_neighbours + 2]
 		# Precompute position differences once
 		var p1 = pos[id1]
 		var p2 = pos[id2]
@@ -119,8 +119,8 @@ func getTetVolume(base_index: int, stride: int) -> float:
 
 func computeEdgeRestLengths():
 	for i in range(edge_vertex_indices.size()):
-		var id1: int = edge_Ids[edge_vertex_indices[i]]
 		var id1_index: int = edge_vertex_indices[i]
+		var id1: int = edge_Ids[id1_index]
 		var s: int = edge_stride[i]
 		edge_lengths[id1_index] = 0.0
 		for str in range(1, s + 1):
@@ -133,8 +133,8 @@ func computeEdgeRestLengths():
 
 func computeTetRestVolumes():
 	for i in range(tet_vertex_indices.size()):
-		var id1: int = tet_Ids[tet_vertex_indices[i]]
 		var id1_index: int = tet_vertex_indices[i]
+		var id1: int = tet_Ids[id1_index]
 		var stride: float = tet_stride[i]
 		tet_volumes[id1_index] = 0.0
 		
