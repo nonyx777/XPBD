@@ -116,3 +116,30 @@ func construct_compact_tet(tets: Array, tet_stride: PackedInt32Array, tet_vertex
 			tet_vertex_indices[i] += tet_stride[j] + 1
 	
 	return compact
+	
+func construct_edge(edges: Array) -> PackedInt32Array:
+	var edge_array: PackedInt32Array = PackedInt32Array()
+	# Add all edges to adjacency list
+	for edge in edges:
+		var v0 = edge[0]
+		var v1 = edge[1]
+		edge_array.append(v0)
+		edge_array.append(v1)
+	
+	return edge_array
+
+
+func construct_tet(tets: Array) -> PackedInt32Array:
+	# Add all tets to adjacency list
+	var tet_array = PackedInt32Array()
+	for tet in tets:
+		var t0 = tet[0]
+		var t1 = tet[1]
+		var t2 = tet[2]
+		var t3 = tet[3]
+		
+		tet_array.append(t0)
+		tet_array.append(t1)
+		tet_array.append(t2)
+		tet_array.append(t3)
+	return tet_array
