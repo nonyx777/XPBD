@@ -13,8 +13,8 @@ var velocity: PackedVector3Array
 var edge_Ids: PackedInt32Array
 var tet_Ids: PackedInt32Array
 
-var edge_compliance: float = 0.0001
-var volume_compliance: float = 0.000001
+var edge_compliance: float = 0.0
+var volume_compliance: float = 0.0
 
 var edge_lengths: PackedFloat32Array
 var tet_volumes: PackedFloat32Array
@@ -22,7 +22,7 @@ var tet_volumes: PackedFloat32Array
 # [e1, e2, e3 | e2, e3 | e3, e1] Compact Edge Array
 # [2, 1, 1] Edge Stride
 # [0, 3, 5] Edge Vertex Indices
-func solveEdges(compliance: float = 0.0001, dt: float = 0.01):
+func solveEdges(compliance: float, dt: float):
 	var alpha: float = compliance / dt / dt
 	for i in range(0, edge_Ids.size(), 2):
 		var id1: int = edge_Ids[i]
@@ -53,33 +53,28 @@ func solveEdges(compliance: float = 0.0001, dt: float = 0.01):
 # [0, 4] # Tetrahedron Vertex Indices
 func solveVolumes(compliance: float, dt: float):
 	var alpha: float = compliance / dt / dt
-	var volIdOrder = [[1,2,3], [0,2,3], [0,3,1], [0,1,2]]  # Same as his volIdOrder
+	var volIdOrder = [[1,3,2], [0,2,3], [0,3,1], [0,1,2]]
 
 	for i in range(0, tet_Ids.size(), 4):
 		var w = 0.0
-		var grads = []  # Store gradients for each vertex
+		var grads = []
 		grads.resize(4)
 		
-		# Compute gradients for all 4 vertices using his ordering
 		for j in range(4):
 			var id0 = tet_Ids[i + volIdOrder[j][0]]
 			var id1 = tet_Ids[i + volIdOrder[j][1]]
 			var id2 = tet_Ids[i + volIdOrder[j][2]]
 			
-			# Get positions
 			var p0 = pos[id0]
 			var p1 = pos[id1]
 			var p2 = pos[id2]
 			
-			# Compute differences
 			var v1 = p1 - p0
 			var v2 = p2 - p0
 			
-			# Cross product and scale by 1/6
 			var grad = v1.cross(v2) * (1.0/6.0)
 			grads[j] = grad
 			
-			# Accumulate weighted sum
 			w += inv_mass[tet_Ids[i + j]] * grad.length_squared()
 		
 		if w == 0.0:
@@ -136,14 +131,13 @@ func preSolve(dt: float, force: Vector3):
 		prev_pos[i] = pos[i]
 		pos[i] += velocity[i] * dt
 		
-		if pos[i].y > 3:
+		if pos[i].y < -10:
 			pos[i] = prev_pos[i]
-			pos[i].y = 3
+			pos[i].y = -10
 
 func solve(dt: float):
 	solveEdges(edge_compliance, dt)
 	solveVolumes(volume_compliance, dt)
-	#print("Position: ", pos[0])
 
 func postSolve(dt):
 	for i in range(pos.size()):
@@ -169,7 +163,7 @@ func _ready():
 		# Center the mesh
 		var bounds = surface_mesh.get_aabb()
 		var center = bounds.get_center()
-		mesh_instance.position = Vector3(0, 2, 0)
+		mesh_instance.position = Vector3(0, 10, 0)
 		
 		# Add to scene
 		add_child(mesh_instance)
@@ -201,7 +195,7 @@ func _ready():
 		print("Pos: ", pos.size())
 
 func _process(delta: float) -> void:
-	var force: Vector3 = Vector3(0, 5, 0)
+	var force: Vector3 = Vector3(0, -5, 0)
 	var dt: float = 0.01
 	var sdt: float = dt / 10
 	preSolve(dt, force)
