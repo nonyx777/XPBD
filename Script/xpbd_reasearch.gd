@@ -24,15 +24,17 @@ var volume_compliance: float = 0.0
 
 var edge_lengths: PackedFloat32Array
 var tet_volumes: PackedFloat32Array
+var tet_temp_volumes: PackedFloat32Array
 
 var tet_task_id: int
 var edge_task_id: int
+
+var sdt: float = 0.0
 
 # [e1, e2, e3 | e2, e3 | e3, e1] Compact Edge Array
 # [2, 1, 1] Edge Stride
 # [0, 3, 5] Edge Vertex Indices
 func solveEdges(i: int, compliance: float = 0.0001, dt: float = 0.01):
-	var sdt: float = 0.1 / 10.0
 	var alpha: float = compliance / sdt / sdt;
 	var id1_index: int = edge_vertex_indices[i]
 	var id1: int = edge_Ids[id1_index]
@@ -64,7 +66,6 @@ func solveEdges(i: int, compliance: float = 0.0001, dt: float = 0.01):
 # [3, 6] # Tetrahedron Stride | Always multiple of 3
 # [0, 4] # Tetrahedron Vertex Indices
 func solveVolumes(i: int, compliance: float = 0.00001, dt: float = 0.01):
-	var sdt: float = 0.1 / 10.0
 	var alpha: float = compliance / sdt / sdt
 	var id1_index: int = tet_vertex_indices[i]
 	var id1: int = tet_Ids[id1_index]
@@ -72,6 +73,7 @@ func solveVolumes(i: int, compliance: float = 0.00001, dt: float = 0.01):
 	
 	var num_iter: int = stride / 3
 	var tet_neighbours: int = 1
+	var volIdOrder = [[2,4,3], [1,3,4], [1,4,2], [1,2,3]]
 	for iter in range(num_iter):
 		var w = 0.0
 		var id2: int = tet_Ids[id1_index + tet_neighbours]
@@ -83,24 +85,33 @@ func solveVolumes(i: int, compliance: float = 0.00001, dt: float = 0.01):
 		var p3 = pos[id3]
 		var p4 = pos[id4]
 		
-		var v21 = p2 - p1
+		# grad 1
+		var v42 = p4 - p2
+		var v32 = p3 - p2
+		# grad 2
 		var v31 = p3 - p1
 		var v41 = p4 - p1
-		var v32 = p3 - p2
-		var v42 = p4 - p2
+		# grad 3
+		#41
+		var v21 = p2 - p1
+		# grad 4
+		#21 and 31
 		
 		# Gradients (each is 1/6 * cross product of two edge vectors)
 		var grad1 = v42.cross(v32) * (1.0/6.0)
-		var grad2 = v41.cross(v31) * (1.0/6.0)
+		var grad2 = v31.cross(v41) * (1.0/6.0)
 		var grad3 = v41.cross(v21) * (1.0/6.0)  # Or compute directly
-		var grad4 = v31.cross(v21) * (1.0/6.0)
+		var grad4 = v21.cross(v31) * (1.0/6.0)
 		
 		w += (inv_mass[id1] * grad1.length_squared()) + (inv_mass[id2] * grad2.length_squared()) + (inv_mass[id3] * grad3.length_squared()) + (inv_mass[id4] * grad4.length_squared())
 		
 		if w == 0.0:
 			continue
 		
-		var vol: float = getTetVolume(id1, tet_neighbours)
+		var vol: float = getTetVolume(id1_index, tet_neighbours)
+		tet_temp_volumes[id1_index + tet_neighbours] = vol
+		tet_temp_volumes[id1_index + tet_neighbours + 1] = vol
+		tet_temp_volumes[id1_index + tet_neighbours + 2] = vol
 		var rest_vol: float = tet_volumes[id1_index + tet_neighbours]
 		var C: float = vol - rest_vol
 		var s: float = -C / (w + alpha)
@@ -108,12 +119,12 @@ func solveVolumes(i: int, compliance: float = 0.00001, dt: float = 0.01):
 		
 		tet_neighbours += 3
 
-func getTetVolume(base_index: int, stride: int) -> float:
+func getTetVolume(base_index: int, offset: int) -> float:
 	var base: int = base_index
 	var id1: int = tet_Ids[base]
-	var id2: int = tet_Ids[base + stride]
-	var id3: int = tet_Ids[base + stride + 1]
-	var id4: int = tet_Ids[base + stride + 2]
+	var id2: int = tet_Ids[base + offset]
+	var id3: int = tet_Ids[base + offset + 1]
+	var id4: int = tet_Ids[base + offset + 2]
 	
 	var vec_21: Vector3 = pos[id2] - pos[id1]
 	var vec_31: Vector3 = pos[id3] - pos[id1]
@@ -225,10 +236,14 @@ func _ready():
 		tet_Ids = tet_array_constructor.construct_compact_tet(tet_mesh.tetrahedra, tet_stride, tet_vertex_indices)
 		edge_lengths.resize(edge_Ids.size())
 		tet_volumes.resize(tet_Ids.size())
+		tet_temp_volumes.resize(tet_Ids.size())
 		tet_volumes.fill(0.0)
 		edge_lengths.fill(0.0)
 		computeEdgeRestLengths()
 		computeTetRestVolumes()
+		
+		for i in range(tet_vertex_indices.size()):
+			solveVolumes(i)
 		
 		print("Edge Ids: ", edge_Ids.size())
 		print("Tet Ids: ", tet_Ids.size())
@@ -237,13 +252,15 @@ func _ready():
 		print("Edge Rest Lengths: ", edge_lengths.size())
 		print("Tet Stride: ", tet_stride.size())
 		print("Tet Vertex Indices: ", tet_vertex_indices.size())
-		print("Tet Rest Volumes: ", tet_volumes.size())
+		print("Tet Rest Volumes: ", tet_volumes.slice(0, 20))
+		print("Tet Temp Volumes: ", tet_temp_volumes.slice(0, 20))
 		print("Pos: ", pos.size())
 
 func _process(delta: float) -> void:
 	var force: Vector3 = Vector3(0, -1, 0)
-	var dt: float = 0.1
-	var sdt: float = dt / 10
-	preSolve(sdt, force)
-	solve(sdt)
-	postSolve(sdt)
+	var dt: float = (1.0 / 60.0)
+	sdt = dt / 5
+	for i in range(5):
+		#preSolve(sdt, force)
+		solve(sdt)
+		postSolve(sdt)
